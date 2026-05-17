@@ -1,0 +1,19 @@
+# AUTO-GENERATED from ENEMY_CLASSES in test.py — do not edit by hand.
+# This file is overwritten on every run. Edit ENEMY_CLASSES instead.
+Zombieman
+ShotgunGuy
+ChaingunGuy
+DoomImp
+Demon
+Spectre
+LostSoul
+Cacodemon
+Fatso
+HellKnight
+Arachnotron
+PainElemental
+Revenant
+BaronOfHell
+Archvile
+SpiderMastermind
+Cyberdemon
