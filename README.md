@@ -117,7 +117,7 @@ Each trained stage's curve is below - **grey = train loss, colour = validation
 mAP, star = best epoch**. Stages 2, 7 and 9 are single-shot (inference or a
 one-off eval), so they have no training curve.
 
-**Stage 1 — ✅ useful baseline, but overfit.** Confirms the 17 classes are separable on clean crops. The 28-point train-val gap exposes overfitting, which motivates regularization. It is only a classifier, though - it cannot localize.
+**Stage 1 — ✅ useful baseline, but overfit.** Confirms the 17 classes are separable on clean crops. The 28 **percentage-point** train–val accuracy gap (≈96% train vs ≈68% val) exposes overfitting, which motivates regularization. It is only a classifier, though - it cannot localize.
 
 <img src="documentation/figures/stage1_curve.png" width="560">
 
