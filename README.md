@@ -88,6 +88,45 @@ train = MAP01-15 + MAP31, val = MAP16-25, test = MAP26-30 + MAP32.
 
 *Placements come from [`vizdoom/maps_enemies.md`](vizdoom/maps_enemies.md) (designer intent); frames-seen are counted from the captured labels in `data/`. They differ because one placed monster is visible across many frames, and some placed monsters are never reached by the capture agent (e.g. a Cyberdemon placed but seen in 0 frames).*
 
+## The nine stages
+
+A controlled progression — each stage changes essentially **one thing** from the
+previous, so every gain (and every failure) has a clear cause. Stages 4 and 8 are
+deliberate **negative results**. All training ran on a free Google Colab **T4 GPU**
+(~10 hours total).
+
+| # | Goal | Model (params) | Key hyperparameters | Loss | Colab T4 | Result |
+|--:|---|---|---|---|--:|--:|
+| 1 | Classify cropped enemies — baseline | SimpleCNN (232 k) | Adam 1e-3, batch 128, 20 ep | CrossEntropy | ~42 min | 71.25% acc |
+| 2 | Naive sliding-window detector | reuses Stage 1 | windows 50–220 px, stride 32, conf 0.4 | — *(inference)* | ~13 min | 4.30% mAP |
+| 3 | From-scratch YOLO detector | YOLODetector (4.75 M) | Adam 1e-3, batch 16, 50 ep | `yolo_loss` | ~2h 45m | 21.12% mAP |
+| 4 | Frozen pretrained backbone ❌ | PretrainedYOLO (34 k trainable) | Adam 1e-3 *head only*, 30 ep | `yolo_loss` | ~50 min | 5.94% mAP |
+| 5 | Fine-tune the backbone | FineTunedYOLO (11.4 M) | bb 1e-4 / head 1e-3, batch 16, 30 ep | `yolo_loss` | ~1h 15m | 30.62% mAP |
+| 6 | + Light augmentation ⭐ best | FineTunedYOLO (11.4 M) | bb 1e-4 / head 1e-3, 40 ep | `yolo_loss` | ~2h | 33.89% mAP |
+| 7 | Quantify per-map vs random leakage | reuses Stage 6 | — *(eval)* | — | ~5 min | +15.69 pp |
+| 8 | + Focal loss ❌ | FineTunedYOLO (11.4 M) | + γ=2.0, α=0.25, 40 ep | `yolo_loss_focal` | ~2h 20m | 32.90% mAP |
+| 9 | Final held-out test | reuses Stage 6 weights | — *(eval, 2 k frames)* | — | ~3 min | **24.21% mAP** |
+
+*(A Stage 1b ablation also trained four classifier variants — plain / dropout /
+augmentation / both — confirming dropout + augmentation lifts val accuracy from
+69.5% to 74.1%.)*
+
+### What the hyperparameters do
+
+- **Epochs** — full passes over the training data. From-scratch (50) and augmented (40) stages need more; fine-tuning a pretrained model converges in 30.
+- **Batch size** — images per gradient step. 16 for the detector (fits T4 memory at 416×416); 128 for the lightweight classifier.
+- **Learning rate** — the step size. Detector stages use **discriminative LRs**: backbone `1e-4` to gently adapt pretrained features, head `1e-3` (10× faster) because it starts random.
+- **λ_box=5, λ_obj=1, λ_noobj=0.5, λ_cls=1** — weights balancing the four loss terms. Box is boosted (localization is the scarce signal); no-object is halved (empty grid cells vastly outnumber occupied ones).
+- **Focal γ=2.0, α=0.25** *(Stage 8 only)* — reshape the loss to focus on hard examples and down-weight easy ones.
+- **Optimizer: Adam** everywhere (adaptive per-parameter learning rate); **gradient clipping at norm 10** prevents exploding updates.
+- **conf 0.25 / NMS-IoU 0.45 / eval-IoU 0.5** — detection thresholds: keep a box, dedup overlaps, count a hit.
+
+### The loss functions
+
+- **CrossEntropy** *(Stages 1–2)* — classification loss `−log(p_correct)`; punishes low probability on the true class.
+- **`yolo_loss`** *(Stages 3–6)* — four weighted parts: **box** (MSE on the cell-relative center + smooth-L1 on the log-scale size), **objectness** (BCE — is an object here?), **no-object** (BCE pushing empty cells toward 0, ×0.5), and **class** (CrossEntropy over the 17 classes).
+- **`yolo_loss_focal`** *(Stage 8)* — the same four parts, but objectness and class use **focal loss** `−(1−p)^γ·log(p)`, which down-weights confident-correct examples to concentrate on hard ones. It slightly *hurt* (−1 pp) — the class imbalance here is too mild for focal's mechanism to help.
+
 ## Setup
 
 **Requires Python 3.11.** Allow ~1 GB for the venv.
