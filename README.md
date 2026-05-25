@@ -111,6 +111,18 @@ deliberate **negative results**. All training ran on a free Google Colab **T4 GP
 augmentation / both — confirming dropout + augmentation lifts val accuracy from
 69.5% to 74.1%.)*
 
+### Why each stage is good or bad
+
+- **Stage 1 — ✅ useful baseline, but overfit.** Confirms the 17 classes are separable on clean crops. The 28-point train–val gap exposes overfitting, which motivates regularization. It's only a classifier, though — it can't localize.
+- **Stage 2 — ⚠️ deliberately bad, on purpose.** A classifier slid over thousands of windows has no concept of "background", so it floods false positives (4.3%). The point is to *quantify* why a purpose-built detector is needed, not to be good.
+- **Stage 3 — ✅ honest floor.** A real one-shot YOLO trained from random init reaches 21%. Good as a from-scratch reference; limited because 12 k frames isn't enough to learn strong visual features from nothing.
+- **Stage 4 — ❌ failure, but the most instructive one.** Freezing the ImageNet backbone also froze its BatchNorm statistics, which are wrong for Doom's pixel-art intensity distribution; the 34 k-param head couldn't recover (5.9%). A bad number with a clean, nameable cause.
+- **Stage 5 — ✅ the big win (+24.7 pp).** Unfreezing lets BatchNorm re-learn Doom-appropriate statistics, while discriminative LRs preserve the pretrained features. This both fixes Stage 4 *and* proves ImageNet features transfer to pixel art (+9.5 pp over from-scratch).
+- **Stage 6 — ⭐ best on val.** Flip + modest color jitter (no hue — that would corrupt palette-coded class identity) fights overfitting from 11.4 M params on 12 k frames. These are the weights carried to the final test.
+- **Stage 7 — ✅ the honesty proof.** Re-evaluating the *same* Stage 6 weights on a leaky random split scores +15.69 pp higher. This is the evidence behind the project's three-numbers story — that the evaluation protocol moves the headline more than most architecture tweaks.
+- **Stage 8 — ❌ a negative result, owned.** Focal loss is built for *extreme* imbalance (≈1000:1, RetinaNet); ours is mild (≈43:1) on a small dataset, so it under-trained the well-fit classes without rescuing the rare ones (−1 pp). Testing the hypothesis and reporting that it didn't apply *is* the result.
+- **Stage 9 — ✅ the honest headline.** Stage 6 weights on entirely held-out maps, measured exactly once: 24.21%. The −9.68 pp drop from val is mostly two late-game maps (MAP29/30) whose architecture was under-represented in training — a generalization finding, not a bug.
+
 ### What the hyperparameters do
 
 - **Epochs** — full passes over the training data. From-scratch (50) and augmented (40) stages need more; fine-tuning a pretrained model converges in 30.
